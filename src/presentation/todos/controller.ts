@@ -1,70 +1,87 @@
 import { Request, Response } from "express";
-
-const todos = [
-  { id: 1, text: "Buy Milk", completedAt: new Date() },
-  { id: 2, text: "Buy Bread", completedAt: null },
-  { id: 3, text: "Buy Butter", completedAt: new Date() },
-];
+import { prisma } from "../../data/postgres";
+import { CreateTodoDTO, UpdateTodoDTO } from "../../domain/dtos";
 
 export class TodoController {
   constructor() {}
 
-  public getTodos = (req: Request, res: Response) => {
+  public getTodos = async (req: Request, res: Response) => {
+    const todos = await prisma.todo.findMany({
+      select: { id: false, text: true },
+    });
+
     res.json(todos);
   };
 
-  public getTodoByID = (req: Request, res: Response) => {
-    const todo = todos.find((todo) => `${todo.id}` === req.params.id);
+  public getTodoByID = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+
+    const todo = await prisma.todo.findUnique({
+      select: { id: true, text: true },
+      where: { id },
+    });
 
     todo
       ? res.status(200).json(todo)
-      : res.status(404).json({ message: `Todo ${req.params.id} not found` });
+      : res.status(404).json({ message: `Todo ${id} not found` });
   };
 
-  public createTodo = (req: Request, res: Response) => {
-    const { text } = req.body;
+  public createTodo = async (req: Request, res: Response) => {
+    const [error, createTodoDTO] = CreateTodoDTO.create(req.body);
 
-    const todo = text && { id: todos.length + 1, text, completedAt: null };
-
-    todos.push(todo);
-
-    todo
-      ? res.status(200).json(todo)
-      : res.status(400).json({ message: "Body not available!" });
-  };
-
-  public updateTodo = (req: Request, res: Response) => {
-    const todo = todos.find((todo) => `${todo.id}` === req.params.id);
-
-    if (!todo) {
-      res.status(404).json({ message: `Todo ${req.params.id} not found` });
-      return;
-    }
-
-    if (!req.body.text) {
+    if (error) {
       res.status(400).json({ message: "Body not available!" });
       return;
     }
 
-    todo.text = req.body.text;
-    todo.completedAt = req.body.completedAt
-      ? new Date(req.body.completedAt)
-      : todo.completedAt;
+    const todo = await prisma.todo.create({ data: createTodoDTO! });
 
-    res.status(200).json({ todoUpdated: todo });
+    res.status(200).json(todo);
   };
 
-  public deleteTodo = (req: Request, res: Response) => {
-    const id = +req.params.id;
-    const todo = todos.find((todo) => todo.id === id);
+  public updateTodo = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    // const { text, completedAt } = req.body;
+    const [error, updatedTodoDTO] = UpdateTodoDTO.create({ ...req.body, id });
 
-    if (!todo) {
-      res.status(404).json({ message: `Todo ${id} not found` });
+    if (error) {
+      res.status(400).json(error);
       return;
     }
 
-    todos.splice(todos.indexOf(todo), 1);
+    try {
+      const updatedTodo = await prisma.todo.update({
+        where: { id: updatedTodoDTO!.id },
+        data: updatedTodoDTO!,
+      });
+      res.status(200).json(updatedTodo);
+    } catch (error: any) {
+      res.status(404).json({ message: error.message.split("\n").at(-1) });
+    }
 
-    res.status(200).json(todo);
+    // try {
+    //   const updatedTodo = await prisma.todo.update({
+    //     where: { id },
+    //     data: { text, completedAt: completedAt ? new Date(completedAt) : null },
+    //   });
+
+    //   res.status(200).json(updatedTodo);
+    // } catch (error: any) {
+    //   res.status(404).json({ message: error.message.split("\n").at(-1) });
+    // }
+  };
+
+  public deleteTodo = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+
+    try {
+      const ok = await prisma.todo.delete({
+        where: { id },
+      });
+
+      res.status(200).json({ message: ok });
+    } catch (error: any) {
+      res.status(404).json({ message: error.message.split("\n").at(-1) });
+    }
   };
 }
