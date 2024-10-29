@@ -9,9 +9,6 @@ export class TodoController {
     const todos = await prisma.todo.findMany({
       select: { id: false, text: true },
     });
-
-    console.log(todos);
-
     res.json(todos);
   };
 
@@ -30,8 +27,6 @@ export class TodoController {
 
   public createTodo = async (req: Request, res: Response) => {
     const [error, createTodoDTO] = CreateTodoDTO.create(req.body);
-
-    console.log(createTodoDTO);
 
     if (error) {
       res.status(400).json({ message: "Body not available!" });
